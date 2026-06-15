@@ -61,18 +61,24 @@ export class ChargerConnection {
     private readonly primaryUrl: string,
     private readonly secondaryUrls: string[],
     private readonly protocol: string,
-    private readonly authHeader: string | undefined
+    private readonly authHeader: string | undefined,
+    private readonly primaryAppendChargePointId: boolean,
+    private readonly secondaryAppendChargePointId: boolean
   ) {
     this.log = createLogger(chargePointId);
     this.setup();
   }
 
   private setup() {
-    this.primary = this.connectPrimary(this.primaryUrl);
+    const primaryUrl = this.resolveUrl(
+      this.primaryUrl,
+      this.primaryAppendChargePointId
+    );
+    this.primary = this.connectPrimary(primaryUrl);
 
     for (const url of this.secondaryUrls) {
       const state: SecondaryState = {
-        url,
+        url: this.resolveUrl(url, this.secondaryAppendChargePointId),
         ws: null,
         queue: [],
         keepalive: null,
@@ -137,9 +143,7 @@ export class ChargerConnection {
    * tears the whole session down (chargers expect to talk to exactly one
    * CSMS at a time).
    */
-  private connectPrimary(baseUrl: string): WebSocket {
-    const url = `${baseUrl.replace(/\/+$/, "")}/${this.chargePointId}`;
-
+  private connectPrimary(url: string): WebSocket {
     const ws = new WebSocket(
       url,
       this.protocol ? [this.protocol] : OCPP_SUBPROTOCOLS,
@@ -192,10 +196,8 @@ export class ChargerConnection {
    * connections aren't dropped by intermediaries.
    */
   private connectSecondary(state: SecondaryState): WebSocket {
-    const url = `${state.url.replace(/\/+$/, "")}/${this.chargePointId}`;
-
     const ws = new WebSocket(
-      url,
+      state.url,
       this.protocol ? [this.protocol] : OCPP_SUBPROTOCOLS,
       {
         headers: this.buildHeaders(),
@@ -204,7 +206,7 @@ export class ChargerConnection {
     );
 
     ws.on("open", () => {
-      this.log.info("secondary connected", { url });
+      this.log.info("secondary connected", { url: state.url });
       state.lastPongAt = Date.now();
       this.flushSecondaryQueue(state, ws);
       this.startSecondaryKeepalive(state, ws);
@@ -217,7 +219,7 @@ export class ChargerConnection {
         return;
       }
       this.log.debug("secondary response (ignored)", {
-        url,
+        url: state.url,
         message: this.summarise(raw),
       });
     });
@@ -228,7 +230,7 @@ export class ChargerConnection {
 
     ws.on("close", (code, reason) => {
       this.log.warn("secondary disconnected", {
-        url,
+        url: state.url,
         code,
         reason: reason.toString(),
       });
@@ -237,7 +239,10 @@ export class ChargerConnection {
     });
 
     ws.on("error", (err) => {
-      this.log.error("secondary error", { url, error: err.message });
+      this.log.error("secondary error", {
+        url: state.url,
+        error: err.message,
+      });
     });
 
     return ws;
@@ -312,6 +317,11 @@ export class ChargerConnection {
       if (!this.alive) return;
       state.ws = this.connectSecondary(state);
     }, SECONDARY_RECONNECT_DELAY_MS);
+  }
+
+  private resolveUrl(baseUrl: string, appendChargePointId: boolean): string {
+    const base = baseUrl.replace(/\/+$/, "");
+    return appendChargePointId ? `${base}/${this.chargePointId}` : base;
   }
 
   private buildHeaders(): Record<string, string> {

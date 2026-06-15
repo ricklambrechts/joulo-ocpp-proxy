@@ -13,7 +13,7 @@ const log = createLogger("proxy");
  * Chargers connect via:
  *   ws(s)://proxy-host:port/<chargePointId>
  *
- * The proxy appends the same chargePointId to each upstream CSMS URL.
+ * The proxy can append the chargePointId to each upstream CSMS URL.
  */
 export function startProxy(config: Config) {
   const server = createServer((_req, res) => {
@@ -59,7 +59,9 @@ export function startProxy(config: Config) {
       config.primaryUrl,
       config.secondaryUrls,
       protocol,
-      authHeader
+      authHeader,
+      config.primaryAppendChargePointId,
+      config.secondaryAppendChargePointId
     );
   });
 
@@ -72,6 +74,8 @@ export function startProxy(config: Config) {
       port: config.port,
       primary: config.primaryUrl,
       secondaries: config.secondaryUrls,
+      primaryAppendChargePointId: config.primaryAppendChargePointId,
+      secondaryAppendChargePointId: config.secondaryAppendChargePointId,
     });
   });
 

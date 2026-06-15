@@ -2,10 +2,33 @@ export interface Config {
   port: number;
   primaryUrl: string;
   secondaryUrls: string[];
+  primaryAppendChargePointId: boolean;
+  secondaryAppendChargePointId: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
 }
 
 const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+
+function parseBooleanEnv(
+  value: string | undefined,
+  defaultValue: boolean,
+  name: string
+): boolean {
+  if (value === undefined || value.trim() === "") return defaultValue;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+
+  if (normalized === "false") {
+    return false;
+  }
+
+  throw new Error(
+    `Invalid ${name} value: "${value}". Expected one of: true, false.`
+  );
+}
 
 export function loadConfig(): Config {
   const primaryUrl = process.env.PRIMARY_CSMS_URL;
@@ -20,6 +43,18 @@ export function loadConfig(): Config {
     .split(",")
     .map((u) => u.trim())
     .filter(Boolean);
+
+  const primaryAppendChargePointId = parseBooleanEnv(
+    process.env.PRIMARY_CSMS_APPEND_CHARGE_POINT_ID,
+    true,
+    "PRIMARY_CSMS_APPEND_CHARGE_POINT_ID"
+  );
+
+  const secondaryAppendChargePointId = parseBooleanEnv(
+    process.env.SECONDARY_CSMS_APPEND_CHARGE_POINT_ID,
+    true,
+    "SECONDARY_CSMS_APPEND_CHARGE_POINT_ID"
+  );
 
   const level = (process.env.LOG_LEVEL ?? "info").toLowerCase();
   const logLevel = LOG_LEVELS.includes(level as any)
@@ -38,6 +73,8 @@ export function loadConfig(): Config {
     port,
     primaryUrl,
     secondaryUrls,
+    primaryAppendChargePointId,
+    secondaryAppendChargePointId,
     logLevel,
   };
 }
